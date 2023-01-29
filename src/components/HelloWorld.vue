@@ -1,58 +1,116 @@
 <template>
-  <div class="hello">
-    <h1>{{ msg }}</h1>
-    <p>
-      For a guide and recipes on how to configure / customize this project,<br>
-      check out the
-      <a href="https://cli.vuejs.org" target="_blank" rel="noopener">vue-cli documentation</a>.
-    </p>
-    <h3>Installed CLI Plugins</h3>
-    <ul>
-      <li><a href="https://github.com/vuejs/vue-cli/tree/dev/packages/%40vue/cli-plugin-babel" target="_blank" rel="noopener">babel</a></li>
-      <li><a href="https://github.com/vuejs/vue-cli/tree/dev/packages/%40vue/cli-plugin-eslint" target="_blank" rel="noopener">eslint</a></li>
-    </ul>
-    <h3>Essential Links</h3>
-    <ul>
-      <li><a href="https://vuejs.org" target="_blank" rel="noopener">Core Docs</a></li>
-      <li><a href="https://forum.vuejs.org" target="_blank" rel="noopener">Forum</a></li>
-      <li><a href="https://chat.vuejs.org" target="_blank" rel="noopener">Community Chat</a></li>
-      <li><a href="https://twitter.com/vuejs" target="_blank" rel="noopener">Twitter</a></li>
-      <li><a href="https://news.vuejs.org" target="_blank" rel="noopener">News</a></li>
-    </ul>
-    <h3>Ecosystem</h3>
-    <ul>
-      <li><a href="https://router.vuejs.org" target="_blank" rel="noopener">vue-router</a></li>
-      <li><a href="https://vuex.vuejs.org" target="_blank" rel="noopener">vuex</a></li>
-      <li><a href="https://github.com/vuejs/vue-devtools#vue-devtools" target="_blank" rel="noopener">vue-devtools</a></li>
-      <li><a href="https://vue-loader.vuejs.org" target="_blank" rel="noopener">vue-loader</a></li>
-      <li><a href="https://github.com/vuejs/awesome-vue" target="_blank" rel="noopener">awesome-vue</a></li>
-    </ul>
-  </div>
+  <v-container>
+    <video id="video"></video>
+    <div id="face" :style="{ transform: `translate(${x}px, ${y}px)` }">顔だよ</div>
+    <div id="leftEye">左目{{leftEye}}</div>
+    <div id="rightEye">右目{{rightEye}}</div>
+    <div id="mouth">口開度{{mouth}}</div>
+  <!--
+    <h1 id="status">すてーたす</h1>
+    <h1 id="text">はろーわーるど</h1>
+    -->
+  </v-container>
 </template>
+<script src="./index.js"></script>
 
 <script>
-export default {
-  name: 'HelloWorld',
-  props: {
-    msg: String
+import * as facemesh from "@tensorflow-models/facemesh";
+import * as tf from "@tensorflow/tfjs-core";
+import "@tensorflow/tfjs-backend-cpu";
+import "@tensorflow/tfjs-backend-webgl";
+import delay from 'delay';
+
+  export default {
+    name: 'HelloWorld',
+
+    data () {
+      return {
+        x: 0,
+        y: 0,
+        leftEye : 0,
+        rightEye: 0,
+        mouth: 0
+        }
+    },
+    async mounted() {
+      const videoDom = document.getElementById('video');
+      navigator.mediaDevices.getUserMedia({
+        video: true,
+        audio: false,
+      }).then(stream => {
+        videoDom.srcObject = stream;
+        videoDom.play();
+      }).catch(e => {
+        console.log(e);
+      });
+
+      await tf.setBackend('webgl');
+      await tf.ready();
+
+      await new Promise((resolve ,reject)=>{
+        videoDom.addEventListener('loadeddata', (event) => {
+          resolve();
+        });
+      })
+
+      const model = await facemesh.load();
+      const video = document.querySelector('video');
+
+      console.log('stanby')
+
+      const loop = async () => {
+        const faces = await model.estimateFaces(video);
+        console.log(faces.length)
+        if (!faces.length) {
+          await delay(100)
+          loop()
+          return
+        };
+        this.x = faces[0].boundingBox.topLeft[0]
+        this.y = faces[0].boundingBox.topLeft[1]
+
+        this.leftEye = Math.round(faces[0].mesh[159][1] - faces[0].mesh[145][1])
+        this.rightEye = Math.round(faces[0].mesh[386][1] - faces[0].mesh[374][1])
+        this.mouth = Math.round(faces[0].mesh[14][1] - faces[0].mesh[13][1])
+        loop();
+      }
+      loop();
+      /*
+      setInterval(async () => {
+        const faces = await model.estimateFaces(video);
+        console.log(faces.length)
+        if (!faces.length) {
+          return
+        };
+        this.x = faces[0].boundingBox.topLeft[0]
+        this.y = faces[0].boundingBox.topLeft[1]
+      },4)
+      */
+
+
+      ///////////////////////////////////
+      if ('webkitSpeechRecognition' in window) {
+        console.log('いけるよ');
+      } else {
+        console.log('だめだよ');
+      }
+      navigator.mediaDevices.getUserMedia({audio: true, video: false})
+        //SpeechRecognition = webkitSpeechRecognition || SpeechRecognition;
+        const recognition = new webkitSpeechRecognition();
+      
+        recognition.onresult = (event) => {
+          alert(event.results[0][0].transcript);
+        }
+      
+        recognition.start();
+    }
   }
-}
+
 </script>
 
-<!-- Add "scoped" attribute to limit CSS to this component only -->
-<style scoped>
-h3 {
-  margin: 40px 0 0;
-}
-ul {
-  list-style-type: none;
-  padding: 0;
-}
-li {
-  display: inline-block;
-  margin: 0 10px;
-}
-a {
-  color: #42b983;
+<style>
+#video{
+	-ms-filter: blur(10px);
+	filter: blur(10px);
 }
 </style>
